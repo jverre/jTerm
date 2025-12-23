@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import sys
 from . import widget
 from .. import logging
+import textwrap
 
 @dataclass
 class Input(widget.Widget):
@@ -9,7 +10,11 @@ class Input(widget.Widget):
 
     def get_intrinsic_height(self) -> int:
         """Single-line input: 1 line + border space"""
-        return 1 + self.border.vertical_space
+        try:
+            nb_lines = (len(self.content) // self.content_rect.width) + 1
+        except:
+            nb_lines = 1
+        return nb_lines + self.border.vertical_space
 
     def get_intrinsic_width(self) -> int:
         return len(self.content) + self.border.horizontal_space
@@ -30,5 +35,10 @@ class Input(widget.Widget):
     def render_content(self):
         logging.log("Input widget", self.rect)
         r = self.content_rect
-        sys.stdout.write(f"\033[{r.y + 1};{r.x + 1}H{self.content}")
+
+        logging.log("Content width", r)
+        formatted_content = textwrap.fill(self.content, width=r.width)
+
+        for i, line in enumerate(formatted_content.split('\n')):
+            sys.stdout.write(f"\033[{r.y + 1 + i};{r.x + 1}H{line}")
         sys.stdout.flush()
