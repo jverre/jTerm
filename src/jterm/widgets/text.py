@@ -8,19 +8,38 @@ from .. import logging
 class Text(widget.Widget):
     content: str = ""
 
-    def get_intrinsic_height(self) -> int:
+    def get_intrinsic_height(self, available_width: int = 0) -> int:
         try:
-            nb_lines = (len(self.content) // self.content_rect.width) + 1
-        except:
+            lines = self.content.split("\n")
+            logging.log("nb_lines", len(lines))
+            nb_lines = 0
+            for line in lines:
+                nb_lines += (len(line) // available_width) + 1
+        except Exception as e:
+            logging.log("Error: ", e)
             nb_lines = 1
+
         return nb_lines + self.border.vertical_space
 
     def get_intrinsic_width(self) -> int:
-        if len(self.content) >= self.content_rect.width:
-            return self.content_rect.width + self.border.horizontal_space
-        else:
-            return len(self.content) + self.border.horizontal_space
+        max_line_width = 0
+
+        lines = self.content.split("\n")
+        for line in lines:
+            line_width = min(len(line), self.content_rect.width)
+            max_line_width = max(max_line_wdith, line_width)
+
+        return max_line_width + self.border.horizontal_space
 
     def render_content(self):
-        sys.stdout.write(f"\033[{self.rect.y + 1};{self.rect.x + 1}H{self.content}")
+        logging.log("Text: ", self.content_rect)
+        for i, line in enumerate(self.content.split("\n")):
+            if i == 0:
+                sys.stdout.write(
+                    f"\033[{self.content_rect.y + 1};{self.content_rect.x + 1}H> {line}"
+                )
+            else:
+                sys.stdout.write(
+                    f"\033[{self.content_rect.y + 1 + i};{self.content_rect.x + 1}H  {line}"
+                )
         sys.stdout.flush()

@@ -1,9 +1,11 @@
 from typing import Optional
+import os
 import sys
 import termios
 import tty
 import asyncio
-from . import widgets, commands, core, logging, layout
+import fcntl
+from . import widgets, commands, core, logging, layout, ascii
 
 
 class App:
@@ -14,9 +16,10 @@ class App:
         self.width, self.height = commands.terminal_size()
         self._fd = sys.stdin.fileno()
         self._old_settings = None
+        self._old_flags = None
 
         self._running = False
-        self._key_queue: asyncio.Queue[str] = asyncio.Queue()
+        self._key_queue: asyncio.Queue[ascii.Key] = asyncio.Queue()
 
         self._handlers = {}
         self._register_handlers()
@@ -26,7 +29,7 @@ class App:
         for child in widget.children:
             self._mount_widget(child)
 
-    def mount(self, parent: widget.Widget, child: widget.Widget):
+    def mount(self, parent: widgets.Widget, child: widgets.Widget):
         self._mount_widget(child)
         parent.children.append(child)
 
@@ -64,20 +67,32 @@ class App:
 
     def _start_terminal(self):
         self._old_settings = termios.tcgetattr(self._fd)
+
+        self._old_flags = fcntl.fcntl(self._fd, fcntl.F_GETFL)
+        # fcntl.fcntl(self._fd, fcntl.F_SETFL, self._old_flags | os.O_NONBLOCK)
+
         tty.setraw(self._fd)
-        sys.stdout.write("\033[?1049h\033[?25l")
+        sys.stdout.write("\x1b[?1049h")  # Alternate screen
+        sys.stdout.write("\x1b[?25l")  # Hide cursor
+        sys.stdout.write(
+            "\x1b[>1u"
+        )  # https://sw.kovidgoyal.net/kitty/keyboard-protocol/
         sys.stdout.flush()
 
     def _stop_terminal(self):
-        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
-        sys.stdout.write("\033[?25h\033[?1049l")
+        sys.stdout.write("\x1b[>0u")
+        sys.stdout.write("\x1b[?25h")
+        sys.stdout.write("\x1b[?1049l")
         sys.stdout.flush()
 
+        # fcntl.fcntl(self._fd, fcntl.F_SETFL, self._old_flags)
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
+
     def _add_key_to_queue(self):
-        key = sys.stdin.read(1)
+        key = ascii.read_key()
         self._key_queue.put_nowait(key)
 
-    async def read_key(self) -> str:
+    async def read_key(self) -> ascii.Key:
         return await self._key_queue.get()
 
     def write(self, data: str):
@@ -112,7 +127,7 @@ class App:
 
                 key = await self.read_key()
 
-                if key == "q":
+                if key.key == "q":
                     break
 
                 self.root.handle_key(key)

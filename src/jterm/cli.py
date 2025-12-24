@@ -1,8 +1,7 @@
 import argparse
 import asyncio
-from . import app, layout
+from . import app, layout, logging
 from .widgets import Container, Text, Input
-from .logging import run_console
 from .messages import on
 
 
@@ -33,11 +32,14 @@ class JTERM(app.App):
     def on_input_submitted(self, message: Input.Submitted):
         messages_container = self.query_one("#messages")
 
-        message_count = len(messages_container.children)
-        self.mount(
-            messages_container,
-            Text(id=f"msg-{message_count + 1}", content=f"> {message.value}"),
-        )
+        if messages_container is None:
+            logging.log("Failed to find messages container")
+        else:
+            message_count = len(messages_container.children)
+            self.mount(
+                messages_container,
+                Text(id=f"msg-{message_count + 1}", content=f"{message.value}"),
+            )
 
 
 def main():
@@ -47,7 +49,7 @@ def main():
 
     args = parser.parse_args()
     if args.command == "console":
-        run_console()
+        logging.run_console()
     else:
         asyncio.run(JTERM(dev=args.dev).run())
 

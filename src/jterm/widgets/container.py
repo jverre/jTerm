@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 from . import widget
 from .. import logging, layout
+from ..layout import DirectionMode, Rect, SizeMode
 
 
 @dataclass
 class Container(widget.Widget):
     """Note: This will map to a "div" in web UI"""
 
-    direction: layout.DirectionMode = layout.DirectionMode.VERTICAL
+    direction: DirectionMode = DirectionMode.VERTICAL
 
-    def layout(self, available: layout.Rect):
+    def layout(self, available: Rect):
         super().layout(available)
 
         if not self.children:
@@ -21,25 +22,25 @@ class Container(widget.Widget):
         for child in self.children:
             size = (
                 child.height
-                if self.direction == layout.DirectionMode.VERTICAL
+                if self.direction == DirectionMode.VERTICAL
                 else child.width
             )
 
-            if size.mode == layout.SizeMode.FIXED:
+            if size.mode == SizeMode.FIXED:
                 fixed_space += size.value
-            elif size.mode == layout.SizeMode.AUTO:
-                if self.direction == layout.DirectionMode.VERTICAL:
-                    fixed_space += child.get_intrinsic_height()
+            elif size.mode == SizeMode.AUTO:
+                if self.direction == DirectionMode.VERTICAL:
+                    fixed_space += child.get_intrinsic_height(available.width)
                 else:
                     fixed_space += child.get_intrinsic_width()
-            elif size.mode == layout.SizeMode.FILL:
+            elif size.mode == SizeMode.FILL:
                 fill_count += 1
             else:
                 raise ValueError(f"Unknown size mode: {size.mode}")
 
         total_space = (
             self.rect.height
-            if self.direction == layout.DirectionMode.VERTICAL
+            if self.direction == DirectionMode.VERTICAL
             else self.rect.width
         )
         remaining = max(0, total_space - fixed_space)
@@ -49,15 +50,15 @@ class Container(widget.Widget):
         for child in self.children:
             child_size = self._get_child_size(child, fill_size)
 
-            if self.direction == layout.DirectionMode.VERTICAL:
-                child_rect = layout.Rect(
+            if self.direction == DirectionMode.VERTICAL:
+                child_rect = Rect(
                     x=self.rect.x,
                     y=self.rect.y + offset,
                     width=self.rect.width,
                     height=child_size,
                 )
             else:
-                child_rect = layout.Rect(
+                child_rect = Rect(
                     x=self.rect.x + offset,
                     y=self.rect.y,
                     width=child_size,
@@ -68,25 +69,23 @@ class Container(widget.Widget):
             offset += child_size
 
     def _get_child_size(self, child: widget.Widget, fill_size: int) -> int:
-        size = (
-            child.height
-            if self.direction == layout.DirectionMode.VERTICAL
-            else child.width
-        )
+        size = child.height if self.direction == DirectionMode.VERTICAL else child.width
 
         # TODO: Check this
-        if size.mode == layout.SizeMode.FIXED:
+        if size.mode == SizeMode.FIXED:
             return size.value
-        elif size.mode == layout.SizeMode.AUTO:
-            if self.direction == layout.DirectionMode.VERTICAL:
-                return child.get_intrinsic_height()
+        elif size.mode == SizeMode.AUTO:
+            if self.direction == DirectionMode.VERTICAL:
+                return child.get_intrinsic_height(100)
             else:
                 return child.get_intrinsic_width()
-        elif size.mode == layout.SizeMode.FILL:
+        elif size.mode == SizeMode.FILL:
             return fill_size
         else:
             raise ValueError(f"Unknown size mode: {size.mode}")
 
     def render(self):
+        logging.log("Container: ", self.content_rect)
+
         for child in self.children:
             child.render()
