@@ -5,8 +5,9 @@ import tty
 import asyncio
 from . import widgets, commands, core, logging, layout
 
+
 class App:
-    def __init__(self, root: widgets.Widget, dev: bool=False):
+    def __init__(self, root: widgets.Widget, dev: bool = False):
         self.root = root
         self._dev = dev
 
@@ -36,21 +37,23 @@ class App:
             handler(message)
         else:
             logging.log(f"Failed to find handler in post_message for: {message}")
-        self.root.render() # TODO: Fix render loop
+        self.root.render()  # TODO: Fix render loop
 
     def _register_handlers(self):
         for name in dir(self):
             method = getattr(self, name)
-            if callable(method) and hasattr(method, '_handles_messages'):
+            if callable(method) and hasattr(method, "_handles_messages"):
                 for msg_type in method._handles_messages:
                     self._handlers[msg_type] = method
 
     def query_one(self, selector: str) -> Optional[widgets.Widget]:
-        if selector.startswith('#'):
+        if selector.startswith("#"):
             return self._find_by_id(self.root, selector[1:])
         return None
-    
-    def _find_by_id(self, widget: widgets.Widget, target_id: str) -> Optional[widgets.Widget]:
+
+    def _find_by_id(
+        self, widget: widgets.Widget, target_id: str
+    ) -> Optional[widgets.Widget]:
         if widget.id == target_id:
             return widget
         for child in widget.children:
@@ -64,12 +67,12 @@ class App:
         tty.setraw(self._fd)
         sys.stdout.write("\033[?1049h\033[?25l")
         sys.stdout.flush()
-        
+
     def _stop_terminal(self):
         termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
         sys.stdout.write("\033[?25h\033[?1049l")
         sys.stdout.flush()
-    
+
     def _add_key_to_queue(self):
         key = sys.stdin.read(1)
         self._key_queue.put_nowait(key)
@@ -85,13 +88,13 @@ class App:
     async def run(self):
         self._running = True
         self._mount_widget(self.root)
-        
+
         if self._dev:
             if logging.ConsoleClient.get().connect():
                 logging.log("=== jTerm Dev Session Started ===")
             else:
                 pass
-        
+
         loop = asyncio.get_running_loop()
         self._start_terminal()
         loop.add_reader(self._fd, self._add_key_to_queue)
@@ -100,16 +103,18 @@ class App:
             i = 0
             while self._running:
                 commands.clear_screen()
-                screen_rect = layout.Rect(x=0, y=0, width=self.width, height=self.height)
+                screen_rect = layout.Rect(
+                    x=0, y=0, width=self.width, height=self.height
+                )
                 self.root.layout(screen_rect)
 
                 self.root.render()
-                
+
                 key = await self.read_key()
 
-                if key == 'q':
+                if key == "q":
                     break
-                
+
                 self.root.handle_key(key)
 
                 commands.clear_screen()
@@ -119,4 +124,3 @@ class App:
             if self._dev:
                 logging.log("=== jTerm Dev Session Ended ===")
                 logging.ConsoleClient.get().disconnect()
-

@@ -4,9 +4,11 @@ from . import widget
 from .. import logging, messages
 import textwrap
 
+
 @dataclass
 class Submitted(messages.Message):
     value: str = ""
+
 
 @dataclass
 class Input(widget.Widget):
@@ -31,13 +33,8 @@ class Input(widget.Widget):
             return True
 
         logging.log("Key: ", ord(key))
-        if ord(key) == 13: # return
-            self.post_message(
-                Input.Submitted(
-                    sender=self,
-                    value=self.content
-                )
-            )
+        if ord(key) == 13:  # return
+            self.post_message(Input.Submitted(sender=self, value=self.content))
             self.content = ""
         if key.isprintable():
             self.content += key
@@ -45,13 +42,13 @@ class Input(widget.Widget):
         elif ord(key) == 127:  # backspace
             self.content = self.content[:-1]
             return True
-        
+
         return False
-    
+
     def render_content(self):
         r = self.content_rect
         formatted_content = textwrap.fill(self.content, width=r.width)
 
-        for i, line in enumerate(formatted_content.split('\n')):
+        for i, line in enumerate(formatted_content.split("\n")):
             sys.stdout.write(f"\033[{r.y + 1 + i};{r.x + 1}H{line}")
         sys.stdout.flush()

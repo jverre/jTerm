@@ -13,5 +13,5 @@ __all__ = [
     "Size",
     "Border",
     "BorderStyle",
-    "BORDER_CHARS"
+    "BORDER_CHARS",
 ]

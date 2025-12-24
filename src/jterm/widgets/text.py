@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from . import widget
 from .. import logging
 
+
 @dataclass
 class Text(widget.Widget):
     content: str = ""
-
 
     def get_intrinsic_height(self) -> int:
         try:
