@@ -2,14 +2,19 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from .. import core, logging, layout
 import sys
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .. import messages, app
 
 @dataclass
 class Widget:
     id: str
+
+    _app: "app.App | None" = field(default=None, repr=False)
     
     width: "layout.Size" = field(default_factory=layout.Size.fill)
-    height: "layout.Size" = field(default_factory=layout.Size.fill)
+    height: "layout.Size" = field(default_factory=layout.Size.auto)
     position: "layout.Position" = field(default_factory=layout.Position)
 
     children: List["Widget"] = field(default_factory=list)
@@ -139,3 +144,8 @@ class Widget:
         self._render_border()
         self.render_content()
 
+    def post_message(self, message: "messages.Message") -> None:
+        if self._app:
+            self._app.post_message(message)
+        else:
+            logging.log(f"Error: failed to post {message}")

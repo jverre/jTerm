@@ -1,15 +1,19 @@
 from dataclasses import dataclass
 import sys
 from . import widget
-from .. import logging
+from .. import logging, messages
 import textwrap
+
+@dataclass
+class Submitted(messages.Message):
+    value: str = ""
 
 @dataclass
 class Input(widget.Widget):
     content: str = ""
+    Submitted = Submitted
 
     def get_intrinsic_height(self) -> int:
-        """Single-line input: 1 line + border space"""
         try:
             nb_lines = (len(self.content) // self.content_rect.width) + 1
         except:
@@ -17,12 +21,24 @@ class Input(widget.Widget):
         return nb_lines + self.border.vertical_space
 
     def get_intrinsic_width(self) -> int:
-        return len(self.content) + self.border.horizontal_space
+        if len(self.content) >= self.content_rect.width:
+            return self.content_rect.width + self.border.horizontal_space
+        else:
+            return len(self.content) + self.border.horizontal_space
 
     def handle_key(self, key: str):
         if super().handle_key(key):
             return True
+
         logging.log("Key: ", ord(key))
+        if ord(key) == 13: # return
+            self.post_message(
+                Input.Submitted(
+                    sender=self,
+                    value=self.content
+                )
+            )
+            self.content = ""
         if key.isprintable():
             self.content += key
             return True
@@ -33,10 +49,7 @@ class Input(widget.Widget):
         return False
     
     def render_content(self):
-        logging.log("Input widget", self.rect)
         r = self.content_rect
-
-        logging.log("Content width", r)
         formatted_content = textwrap.fill(self.content, width=r.width)
 
         for i, line in enumerate(formatted_content.split('\n')):

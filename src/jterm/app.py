@@ -17,6 +17,48 @@ class App:
         self._running = False
         self._key_queue: asyncio.Queue[str] = asyncio.Queue()
 
+        self._handlers = {}
+        self._register_handlers()
+
+    def _mount_widget(self, widget: widgets.Widget):
+        widget._app = self
+        for child in widget.children:
+            self._mount_widget(child)
+
+    def mount(self, parent: widget.Widget, child: widget.Widget):
+        self._mount_widget(child)
+        parent.children.append(child)
+
+    def post_message(self, message) -> None:
+        msg_type = type(message)
+        handler = self._handlers.get(msg_type)
+        if handler:
+            handler(message)
+        else:
+            logging.log(f"Failed to find handler in post_message for: {message}")
+        self.root.render() # TODO: Fix render loop
+
+    def _register_handlers(self):
+        for name in dir(self):
+            method = getattr(self, name)
+            if callable(method) and hasattr(method, '_handles_messages'):
+                for msg_type in method._handles_messages:
+                    self._handlers[msg_type] = method
+
+    def query_one(self, selector: str) -> Optional[widgets.Widget]:
+        if selector.startswith('#'):
+            return self._find_by_id(self.root, selector[1:])
+        return None
+    
+    def _find_by_id(self, widget: widgets.Widget, target_id: str) -> Optional[widgets.Widget]:
+        if widget.id == target_id:
+            return widget
+        for child in widget.children:
+            found = self._find_by_id(child, target_id)
+            if found:
+                return found
+        return None
+
     def _start_terminal(self):
         self._old_settings = termios.tcgetattr(self._fd)
         tty.setraw(self._fd)
@@ -42,6 +84,7 @@ class App:
 
     async def run(self):
         self._running = True
+        self._mount_widget(self.root)
         
         if self._dev:
             if logging.ConsoleClient.get().connect():

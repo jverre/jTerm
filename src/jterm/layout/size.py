@@ -13,7 +13,7 @@ class Size:
     mode: SizeMode = field(default=SizeMode.AUTO)
 
     @classmethod
-    def auto(cls, value: int) -> "Size":
+    def auto(cls, value: int = 0) -> "Size":
         return cls(value, SizeMode.AUTO)
 
     @classmethod

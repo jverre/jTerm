@@ -74,6 +74,5 @@ class Container(widget.Widget):
             raise ValueError(f"Unknown size mode: {size.mode}")
             
     def render(self):
-        logging.log("Container", self.rect)
         for child in self.children:
             child.render()
