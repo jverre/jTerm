@@ -77,6 +77,10 @@ class App:
         sys.stdout.write(
             "\x1b[>1u"
         )  # https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+        sys.stdout.write("\033[?1000h")  # Enable mouse click tracking
+        sys.stdout.write("\033[?1003h")  # Enable all mouse movement tracking
+        sys.stdout.write("\033[?1006h")  # Enable SGR extended mouse mode
+
         sys.stdout.flush()
 
     def _stop_terminal(self):
@@ -118,18 +122,30 @@ class App:
             i = 0
             while self._running:
                 commands.clear_screen()
+                
+                # Compute the size of the components
+                dimensions = self.root.measure(
+                    available_width=self.width,
+                    available_height=self.height
+                )
+                
+                # Compute the layout
                 screen_rect = layout.Rect(
-                    x=0, y=0, width=self.width, height=self.height
+                    x=0,
+                    y=0,
+                    width=self.width,
+                    height=self.height
                 )
                 self.root.layout(screen_rect)
 
+                # Render the components
                 self.root.render()
 
                 key = await self.read_key()
 
                 if key.key == "q":
                     break
-
+                
                 self.root.handle_key(key)
 
                 commands.clear_screen()

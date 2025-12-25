@@ -1,11 +1,10 @@
-from .direction import DirectionMode
 from .position import PositionMode, Position
 from .rect import Rect
 from .size import SizeMode, Size
 from .border import Border, BorderStyle, BORDER_CHARS
+from .dimensions import Dimensions
 
 __all__ = [
-    "Direction",
     "PositionMode",
     "Position",
     "Rect",
@@ -14,4 +13,5 @@ __all__ = [
     "Border",
     "BorderStyle",
     "BORDER_CHARS",
+    "Dimensions"
 ]

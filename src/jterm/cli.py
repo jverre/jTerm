@@ -16,12 +16,17 @@ class JTERM(app.App):
                     height=layout.Size.fill(),
                     children=[
                         Text(id="welcome_header", content="Welcome to JTerm"),
+                        Text(
+                            id="many_messages",
+                            content="\n".join([f"message-{i}" for i in range(50)]),
+                            height=layout.Size.auto()
+                        ),
                     ],
                 ),
                 Input(
                     id="input",
                     focused=True,
-                    height=layout.Size.auto(0),
+                    height=layout.Size.auto(),
                     border=layout.Border.all(style=layout.BorderStyle.ROUNDED),
                 ),
             ],
