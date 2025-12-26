@@ -3,103 +3,92 @@ import textwrap
 from dataclasses import dataclass
 from . import widget
 from .. import logging
-from ..layout import Dimensions, SizeMode, Rect
+from ..layout import Size, SizeMode, Rect
+
 
 @dataclass
 class Text(widget.Widget):
     content: str = ""
 
-    def _calculate_dimensions(self, available_width: int | None, available_height: int | None) -> Dimensions:
-        """Measures the size of the Text component
-        
-        Args:
-            available_width: Total width available including borders (None for no constraint)
-            available_height: Total height available including borders (None for no constraint)
-        
-        Returns:
-            Dimensions: Total dimensions including borders
-        """
-        lines = self.content.split('\n')
+    def _calculate_dimensions(
+        self, available_width: int | None, available_height: int | None
+    ) -> Size:
+        """Returns CONTENT dimensions only (no borders).
 
-        # Determine available width:
-        if available_width is None:
-            available_content_width = None
-        else:
-            available_content_width = available_width - self.border.horizontal_space
-        
-        # Compute height
+        Args:
+            available_width: Width available for CONTENT (borders already subtracted)
+            available_height: Height available for CONTENT (borders already subtracted)
+        """
+        lines = self.content.split("\n")
+
+        # Compute CONTENT height (no borders!)
         if self.height.mode == SizeMode.FILL:
-            if available_height is None: # Fallback to AUTO mode
-                height = self.border.vertical_space
+            if available_height is None:
+                # Fallback to AUTO
+                content_height = 0
                 for line in lines:
-                    if available_content_width is not None:
-                        height += len(line) // available_content_width + 1
+                    if available_width is not None and available_width > 0:
+                        content_height += (len(line) // available_width) + 1
                     else:
-                        height += 1
+                        content_height += 1
             else:
-                height = available_height
+                content_height = available_height
         elif self.height.mode == SizeMode.FIXED:
-            height = self.height.value
+            # FIXED includes borders, so subtract them for content
+            content_height = max(0, self.height.value - self.border.vertical_space)
         elif self.height.mode == SizeMode.AUTO:
-                height = self.border.vertical_space
-                for line in lines:
-                    if available_content_width is not None:
-                        height += len(line) // available_content_width + 1
-                    else:
-                        height += 1
+            content_height = 0
+            for line in lines:
+                if available_width is not None and available_width > 0:
+                    content_height += (len(line) // available_width) + 1
+                else:
+                    content_height += 1
         else:
             raise ValueError(f"SizeMode {self.height.mode} not supported")
 
-        # Compute width
+        # Compute CONTENT width (no borders!)
         if self.width.mode == SizeMode.FILL:
             if available_width is None:
-                width = max((len(line) for line in lines)) + self.border.horizontal_space
+                content_width = max((len(line) for line in lines), default=0)
             else:
-                width = available_width
+                content_width = available_width
         elif self.width.mode == SizeMode.FIXED:
-            width = self.width.value
+            content_width = max(0, self.width.value - self.border.horizontal_space)
         elif self.width.mode == SizeMode.AUTO:
-            width = 0
-
+            content_width = 0
             for line in lines:
                 if available_width is not None:
-                    line_width = min(len(line), available_content_width)
+                    line_width = min(len(line), available_width)
                 else:
                     line_width = len(line)
-                width = max(line_width, width)
-            width += self.border.horizontal_space
+                content_width = max(line_width, content_width)
         else:
             raise ValueError(f"SizeMode {self.width.mode} not supported")
 
-        return Dimensions(width=width, height=height)
+        return Size(width=content_width, height=content_height)
 
     def layout(self, rect: Rect):
         self.rect = rect
 
     def render_content(self):
         r = self.content_rect
-        lines = self.content.split('\n')
-
         if r.height <= 0:
             return
-        
-        # Expand all lines with wrapping first to get the full list of display lines
+
+        lines = self.content.split("\n")
         display_lines = []
         for line in lines:
-            formatted_line = textwrap.fill(line, width=r.width)
-            display_lines.extend(formatted_line.split("\n"))
-        
-        # Apply scroll_offset and _clip_top: skip lines that are scrolled or clipped by parent
-        start_line = self.scroll_offset + self._clip_top
-        visible_lines = display_lines[start_line:start_line + r.height]
-        
-        # Render only the visible lines
-        for current_row, line_content in enumerate(visible_lines):
-            if current_row >= r.height:
+            formatted = textwrap.fill(line, width=r.width) if r.width > 0 else line
+            display_lines.extend(formatted.split("\n"))
+
+        # Skip lines clipped by parent scroll
+        clip_top = getattr(self, "_render_clip_top", 0)
+        start = self.scroll_offset + clip_top
+        visible = display_lines[start : start + r.height]
+
+        for row, line in enumerate(visible):
+            if row >= r.height:
                 break
-            
-            sys.stdout.write(
-                f"\033[{r.y + 1 + current_row};{r.x + 1}H{line_content}"
-            )
-        
+            sys.stdout.write(f"\033[{r.y + 1 + row};{r.x + 1}H{line}")
+
         sys.stdout.flush()

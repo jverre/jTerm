@@ -9,18 +9,20 @@ class SizeMode(Enum):
 
 
 @dataclass
-class Size:
+class Sizing:
+    """Sizing policy (how a widget should be sized)."""
+
     value: int = 0
     mode: SizeMode = field(default=SizeMode.AUTO)
 
     @classmethod
-    def auto(cls, value: int = 0) -> "Size":
+    def auto(cls, value: int = 0) -> "Sizing":
         return cls(value, SizeMode.AUTO)
 
     @classmethod
-    def fixed(cls, value: int) -> "Size":
+    def fixed(cls, value: int) -> "Sizing":
         return cls(value, SizeMode.FIXED)
 
     @classmethod
-    def fill(cls) -> "Size":
+    def fill(cls) -> "Sizing":
         return cls(0, SizeMode.FILL)

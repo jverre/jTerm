@@ -1,17 +1,18 @@
 from .position import PositionMode, Position
-from .rect import Rect
-from .size import SizeMode, Size
+from .geometry import Size, Rect
+from .size import SizeMode, Sizing
 from .border import Border, BorderStyle, BORDER_CHARS
-from .dimensions import Dimensions
+from .overflow import Overflow
 
 __all__ = [
     "PositionMode",
     "Position",
+    "Size",
     "Rect",
     "SizeMode",
-    "Size",
+    "Sizing",
     "Border",
     "BorderStyle",
     "BORDER_CHARS",
-    "Dimensions"
+    "Overflow",
 ]

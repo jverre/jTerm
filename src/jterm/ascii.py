@@ -9,13 +9,15 @@ import fcntl
 
 CSI_U_RE = re.compile(r"^\[(\d+);(\d+)u$")  # after ESC is consumed
 
+
 @dataclass
 class Mouse:
     x: int
     y: int
-    
+
     scroll_up: bool = False
     scroll_down: bool = False
+
 
 @dataclass
 class Key:
@@ -97,7 +99,7 @@ def _read_escape_sequence() -> Optional[Key | Mouse]:
 def _parse_sequence(sequence: str) -> Optional[Key | Mouse]:
     if not sequence:
         return Key(key="escape")
-    
+
     if sequence.startswith("[<"):
         return _parse_mouse_sgr(sequence)
 
@@ -156,27 +158,28 @@ def _parse_sequence(sequence: str) -> Optional[Key | Mouse]:
     logging.log(f"Unknown sequence: {sequence}")
     return Key(key=f"{sequence}")
 
+
 def _parse_mouse_sgr(sequence: str):
-        # Remove the [< prefix
+    # Remove the [< prefix
     if not sequence.startswith("[<"):
         return None
-    
+
     data = sequence[2:]
 
     if data.endswith("M"):
-        data=data[:-1]
+        data = data[:-1]
 
     parts = data.split(";")
     if len(parts) != 3:
         return None
-    
+
     try:
         cb = int(parts[0])
         x = int(parts[1])
         y = int(parts[2])
     except ValueError as e:
         return None
-    
+
     scroll = bool(cb & 64)
     scroll_up = False
     scroll_down = False
@@ -188,10 +191,4 @@ def _parse_mouse_sgr(sequence: str):
         elif scroll_direction == 1:
             scroll_down = True
 
-
-    return Mouse(
-        x=x,
-        y=y,
-        scroll_up=scroll_up,
-        scroll_down=scroll_down
-    )
+    return Mouse(x=x, y=y, scroll_up=scroll_up, scroll_down=scroll_down)

@@ -9,19 +9,23 @@ class JTERM(app.App):
     def __init__(self, dev: bool = False):
         root = Container(
             id="root",
-            height=layout.Size.fill(),
+            height=layout.Sizing.fill(),
             children=[
                 Container(
                     id="messages",
-                    height=layout.Size.fill(),
+                    height=layout.Sizing.fill(),
+                    overflow_y=layout.Overflow.AUTO,
                     children=[
-                        Text(id="welcome_header", content="Welcome to JTerm", scrollable=False),
+                        Text(
+                            id="welcome_header",
+                            content="Welcome to JTerm",
+                        ),
                     ],
                 ),
                 Input(
                     id="input",
                     focused=True,
-                    height=layout.Size.auto(),
+                    height=layout.Sizing.auto(),
                     border=layout.Border.all(style=layout.BorderStyle.ROUNDED),
                 ),
             ],
@@ -41,8 +45,7 @@ class JTERM(app.App):
                 child=Text(
                     id=f"msg-{message_count + 1}",
                     content=f"{message.value}",
-                    height=layout.Size.auto(),
-                    scrollable=False,
+                    height=layout.Sizing.auto(),
                 ),
             )
             logging.log("added new child: ", messages_container.children)

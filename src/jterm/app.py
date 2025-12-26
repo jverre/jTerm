@@ -25,7 +25,7 @@ class App:
         self._handlers = {}
         self._register_handlers()
 
-        self.last_mouse_position = ascii.Mouse(x=0, y= 0)
+        self.last_mouse_position = ascii.Mouse(x=0, y=0)
 
         self._target_fps: int = 10
         self._dirty: bool = True
@@ -53,7 +53,7 @@ class App:
         else:
             logging.log(f"Failed to find handler in post_message for: {message}")
         self.mark_dirty()
-    
+
     def _register_handlers(self):
         for name in dir(self):
             method = getattr(self, name)
@@ -120,7 +120,7 @@ class App:
 
     async def read_key(self) -> ascii.Key:
         return await self._key_queue.get()
-    
+
     async def read_mouse(self) -> ascii.Mouse:
         return await self._mouse_queue.get()
 
@@ -132,36 +132,34 @@ class App:
             self.root.on_frame()
 
             if not self._dirty:
-                sleep_time = (1 / self._target_fps)
+                sleep_time = 1 / self._target_fps
                 await asyncio.sleep(sleep_time)
             else:
                 commands.clear_screen()
 
                 # Define the size each component wants to be
                 self.root.measure(
-                    available_width=self.width,
-                    available_height=self.height
+                    available_width=self.width, available_height=self.height
                 )
-                
+
                 # Compute the layout
                 screen_rect = layout.Rect(
-                    x=0,
-                    y=0,
-                    width=self.width,
-                    height=self.height
+                    x=0, y=0, width=self.width, height=self.height
                 )
                 self.root.layout(screen_rect)
 
                 # Render the components
                 self.root.render()
-                self._dirty=False
-                
+                self._dirty = False
+
                 logging.log("Rendering")
 
                 elapsed = asyncio.get_event_loop().time() - start_time
                 sleep_time = (1 / self._target_fps) - elapsed
                 if sleep_time < 0:
-                    logging.log(f"Render loop took more than {1/self._target_fps}: {elapsed}s")
+                    logging.log(
+                        f"Render loop took more than {1 / self._target_fps}: {elapsed}s"
+                    )
                 else:
                     await asyncio.sleep(sleep_time)
 
@@ -171,17 +169,17 @@ class App:
             key = await self.read_key()
             if isinstance(key, ascii.Key):
                 logging.log(f"received key", key)
-                if key.modifiers == {"ctrl"} and key.key == 'c':
+                if key.modifiers == {"ctrl"} and key.key == "c":
                     self.mark_dirty()
                     self._running = False
                     break
-                
+
                 self.root.handle_key(key)
                 self.mark_dirty()
 
     async def _input_mouse_loop(self):
         """Handles mouse input from dedicated mouse queue.
-        
+
         Following Textual's approach: dispatch each mouse event individually
         and let widgets handle scroll accumulation if needed.
         """
@@ -190,11 +188,9 @@ class App:
                 mouse = await asyncio.wait_for(self._mouse_queue.get(), timeout=0.1)
             except asyncio.TimeoutError:
                 continue  # Check _running again
-            
-            
+
             # Dispatch each mouse event individually to the widget tree
             self.root.handle_mouse(mouse)
-
 
     async def run(self):
         self._running = True
@@ -212,9 +208,7 @@ class App:
 
         try:
             await asyncio.gather(
-                self._render_loop(),
-                self._input_key_loop(),
-                self._input_mouse_loop()
+                self._render_loop(), self._input_key_loop(), self._input_mouse_loop()
             )
         finally:
             self._stop_terminal()
