@@ -15,12 +15,7 @@ class JTERM(app.App):
                     id="messages",
                     height=layout.Size.fill(),
                     children=[
-                        Text(id="welcome_header", content="Welcome to JTerm"),
-                        Text(
-                            id="many_messages",
-                            content="\n".join([f"message-{i}" for i in range(50)]),
-                            height=layout.Size.auto()
-                        ),
+                        Text(id="welcome_header", content="Welcome to JTerm", scrollable=False),
                     ],
                 ),
                 Input(
@@ -42,9 +37,16 @@ class JTERM(app.App):
         else:
             message_count = len(messages_container.children)
             self.mount(
-                messages_container,
-                Text(id=f"msg-{message_count + 1}", content=f"{message.value}"),
+                parent=messages_container,
+                child=Text(
+                    id=f"msg-{message_count + 1}",
+                    content=f"{message.value}",
+                    height=layout.Size.auto(),
+                    scrollable=False,
+                ),
             )
+            logging.log("added new child: ", messages_container.children)
+            self.mark_dirty()
 
 
 def main():

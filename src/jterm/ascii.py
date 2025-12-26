@@ -9,6 +9,13 @@ import fcntl
 
 CSI_U_RE = re.compile(r"^\[(\d+);(\d+)u$")  # after ESC is consumed
 
+@dataclass
+class Mouse:
+    x: int
+    y: int
+    
+    scroll_up: bool = False
+    scroll_down: bool = False
 
 @dataclass
 class Key:
@@ -32,7 +39,7 @@ class Key:
         return modifiers
 
 
-def read_key() -> Optional[Key]:
+def read_key() -> Optional[Key | Mouse]:
     ch = sys.stdin.read(1)
 
     # /x1b is ESC, need to check for escape sequence
@@ -60,7 +67,7 @@ def read_key() -> Optional[Key]:
     return Key(key=ch)
 
 
-def _read_escape_sequence() -> Optional[Key]:
+def _read_escape_sequence() -> Optional[Key | Mouse]:
     sequence = ""
 
     while True:
@@ -70,6 +77,11 @@ def _read_escape_sequence() -> Optional[Key]:
                 break
             sequence += key
 
+            # Handle mouse sequences
+            if sequence.startswith("[<") and key in ("M", "m"):
+                break
+
+            # Handle modifier sequences
             if key in ("~", "u", "A", "B", "C", "D", "H", "F", "P", "Q", "R", "S"):
                 break
 
@@ -82,9 +94,12 @@ def _read_escape_sequence() -> Optional[Key]:
     return _parse_sequence(sequence)
 
 
-def _parse_sequence(sequence: str) -> Optional[Key]:
+def _parse_sequence(sequence: str) -> Optional[Key | Mouse]:
     if not sequence:
         return Key(key="escape")
+    
+    if sequence.startswith("[<"):
+        return _parse_mouse_sgr(sequence)
 
     m = CSI_U_RE.match(sequence)
     if m:
@@ -140,3 +155,43 @@ def _parse_sequence(sequence: str) -> Optional[Key]:
     # Fallback for unknown sequences
     logging.log(f"Unknown sequence: {sequence}")
     return Key(key=f"{sequence}")
+
+def _parse_mouse_sgr(sequence: str):
+        # Remove the [< prefix
+    if not sequence.startswith("[<"):
+        return None
+    
+    data = sequence[2:]
+
+    if data.endswith("M"):
+        data=data[:-1]
+
+    parts = data.split(";")
+    if len(parts) != 3:
+        return None
+    
+    try:
+        cb = int(parts[0])
+        x = int(parts[1])
+        y = int(parts[2])
+    except ValueError as e:
+        return None
+    
+    scroll = bool(cb & 64)
+    scroll_up = False
+    scroll_down = False
+    if scroll:
+        # SGR scroll encoding: cb=64 (up), cb=65 (down)
+        scroll_direction = cb & 3
+        if scroll_direction == 0:
+            scroll_up = True
+        elif scroll_direction == 1:
+            scroll_down = True
+
+
+    return Mouse(
+        x=x,
+        y=y,
+        scroll_up=scroll_up,
+        scroll_down=scroll_down
+    )

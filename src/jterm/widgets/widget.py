@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from .. import core, logging
+from .. import core, logging, ascii
 from ..layout import Size, Position, Rect, Border, BorderStyle, BORDER_CHARS, SizeMode, Dimensions
 import sys
 from typing import Optional, List, TYPE_CHECKING
@@ -29,40 +29,63 @@ class Widget:
 
     scroll_offset: int = 0
     scrollable: bool = True
+    _scroll_events: List[int] = field(default_factory=list)
+    
+    # How many lines of this widget's content are clipped off the top
+    # (set by parent container during layout when scrolling)
+    _clip_top: int = 0
+
 
     @property
+    def _total_content_height(self) -> int:
+        """Total height of content (sum of children for containers, content height for others)."""
+        if self.children:
+            # For containers: sum of children dimensions (children don't include parent's border)
+            return sum(child.dimensions.height for child in self.children)
+        # For leaf widgets: dimensions includes borders, so subtract them to get content height
+        return max(0, self.dimensions.height - self.border.vertical_space)
+    
+    @property
     def needs_scrollbar(self) -> bool:
-        return(
-            self.scrollable
-            and self.dimensions.height > self.rect.height
-            and self.rect.height > 0
-        )
+        if not self.scrollable:
+            return False
+        
+        # Check if content exceeds visible area
+        # Use _inner_rect to avoid circular dependency with content_rect
+        inner_height = max(0, self.rect.height - self.border.vertical_space)
+        return self._total_content_height > inner_height and inner_height > 0
     
     @property
     def max_scroll_offset(self) -> int:
         """Maximum scroll offset."""
         if not self.needs_scrollbar:
             return 0
-        return max(0, self.dimensions.height - self.content_rect.height)
+        inner_height = max(0, self.rect.height - self.border.vertical_space)
+        return max(0, self._total_content_height - inner_height)
 
     @property
     def scrollbar_height(self) -> int:
         """Height of the scrollbar thumb."""
         if not self.needs_scrollbar:
             return 0
-        content_height = self.content_rect.height
+        inner_height = max(0, self.rect.height - self.border.vertical_space)
         # Calculate thumb size proportional to visible content
-        thumb_height = max(1, int(content_height * content_height / self.dimensions.height))
-        return min(thumb_height, content_height)
+        thumb_height = max(1, int(inner_height * inner_height / self._total_content_height))
+        return min(thumb_height, inner_height)
 
     @property
     def scrollbar_position(self) -> int:
         """Y position of scrollbar thumb (relative to content_rect top)."""
         if not self.needs_scrollbar or self.max_scroll_offset == 0:
             return 0
-        content_height = self.content_rect.height
-        scrollable_range = content_height - self.scrollbar_height
+        inner_height = max(0, self.rect.height - self.border.vertical_space)
+        scrollable_range = inner_height - self.scrollbar_height
         return int(self.scroll_offset / self.max_scroll_offset * scrollable_range)
+    
+    @property
+    def scrollbar_width(self) -> int:
+        """Width of the scrollbar (1 if needed, 0 otherwise)."""
+        return 1 if self.needs_scrollbar else 0
     
     def scroll_up(self, lines: int = 1) -> bool:
         """Scroll content up (decrease offset). Returns True if scrolled."""
@@ -88,21 +111,21 @@ class Widget:
         
     @property
     def content_rect(self) -> "Rect":
-        """Returns the inner rect available for content (after border insets)."""
+        """Returns the inner rect available for content (after border and scrollbar insets)."""
         return Rect(
             x=self.rect.x + self.border.left_width,
             y=self.rect.y + self.border.top_width,
-            width=max(0, self.rect.width - self.border.horizontal_space),
+            width=max(0, self.rect.width - self.border.horizontal_space - self.scrollbar_width),
             height=max(0, self.rect.height - self.border.vertical_space),
         )
 
-    def _calculate_dimensions(self, available_width: int, available_height: int) -> Dimensions:
+    def _calculate_dimensions(self, available_width: int | None, available_height: int | None) -> Dimensions:
         raise NotImplementedError
 
-    def measure(self, available_width: int, available_height: int) -> Dimensions:
+    def measure(self, available_width: int | None, available_height: int | None) -> Dimensions:
         """This measure the size of the content based on the content"""
         dims = self._calculate_dimensions(available_width, available_height)
-        
+        logging.log(f"{self.id} - Dimensions: {dims}")
         self.dimensions = dims
         
         return dims
@@ -165,16 +188,21 @@ class Widget:
         pass
 
     def _render_scrollbar(self):
-        """Draw the scrollbar on the right edge of the content area."""
+        """Draw the scrollbar on the right edge of the widget (after border)."""
         if not self.needs_scrollbar:
             return
         
-        r = self.content_rect
-        if r.width < 1 or r.height < 1:
+        # Calculate the inner area (after borders, but including scrollbar space)
+        inner_x = self.rect.x + self.border.left_width
+        inner_y = self.rect.y + self.border.top_width
+        inner_width = max(0, self.rect.width - self.border.horizontal_space)
+        inner_height = max(0, self.rect.height - self.border.vertical_space)
+        
+        if inner_width < 1 or inner_height < 1:
             return
         
-        # Scrollbar appears in the rightmost column of content area
-        scrollbar_x = r.x + r.width - 1
+        # Scrollbar appears in the rightmost column of inner area
+        scrollbar_x = inner_x + inner_width - 1
         
         # Characters for scrollbar
         track_char = "│"  # or "║" or "┃"
@@ -189,8 +217,8 @@ class Widget:
         thumb_end = thumb_start + self.scrollbar_height
         
         # Render scrollbar track and thumb
-        for i in range(r.height):
-            y = r.y + i
+        for i in range(inner_height):
+            y = inner_y + i
             if thumb_start <= i < thumb_end:
                 # Render thumb
                 sys.stdout.write(f"\033[{y + 1};{scrollbar_x + 1}H{thumb_color}{thumb_char}{reset}")
@@ -202,9 +230,32 @@ class Widget:
         
     def render(self):
         """Template method: renders border, then delegates to render_content()."""
+        logging.log(f"{self.id} - rect: {self.rect}")
         self._render_border()
         self.render_content()
         self._render_scrollbar()
+
+    def on_frame(self):
+        """Called every frame (60 FPS). Process buffered events here."""
+        # Process scroll buffer
+        if self._scroll_events:
+            THRESHOLD = 1
+            
+            total = sum(self._scroll_events)
+            self._scroll_events.clear()
+            
+            if total >= THRESHOLD:
+                if self.scroll_up(3):
+                    if self._app:
+                        self._app._dirty = True
+            elif total <= -THRESHOLD:
+                if self.scroll_down(3):
+                    if self._app:
+                        self._app._dirty = True
+        
+        # Propagate to children
+        for child in self.children:
+            child.on_frame()
 
     @property
     def focused_child(self) -> Optional["Widget"]:
@@ -214,23 +265,39 @@ class Widget:
                 return child
         return None
     
-    def handle_key(self, key: str) -> bool:
-        if self.needs_scrollbar:
-            if key == "\x1b[A":  # Up arrow
-                return self.scroll_up()
-            elif key == "\x1b[B":  # Down arrow
-                return self.scroll_down()
-            elif key == "\x1b[5~":  # Page Up
-                return self.scroll_up(self.content_rect.height)
-            elif key == "\x1b[6~":  # Page Down
-                return self.scroll_down(self.content_rect.height)
-
+    def handle_key(self, key: ascii.Key) -> bool:
         if self.focused_child:
             if self.focused_child.handle_key(key):
                 return True
 
         return False
-  
+
+    def contains_point(self, x: int, y: int) -> bool:
+        return (
+            self.rect.x <= x < self.rect.x + self.rect.width
+            and self.rect.y <= y < self.rect.y + self.rect.height
+        )
+
+    def handle_mouse(self, mouse: ascii.Mouse):
+        # Propagate to children
+        for child in self.children:
+            if child.handle_mouse(mouse):
+                return True
+        
+        if mouse.scroll_up or mouse.scroll_down:
+            if self.contains_point(mouse.x, mouse.y) and self.needs_scrollbar:
+                if mouse.scroll_up:
+                    self._scroll_events.append(1)
+                elif mouse.scroll_down:
+                    self._scroll_events.append(-1)
+                
+                if self._app:
+                    self._app._dirty=True
+                
+                return True
+        
+        return False
+
     def post_message(self, message: "messages.Message") -> None:
         if self._app:
             self._app.post_message(message)

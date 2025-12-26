@@ -20,10 +20,21 @@ class App:
 
         self._running = False
         self._key_queue: asyncio.Queue[ascii.Key] = asyncio.Queue()
+        self._mouse_queue: asyncio.Queue[ascii.Mouse] = asyncio.Queue()
 
         self._handlers = {}
         self._register_handlers()
 
+        self.last_mouse_position = ascii.Mouse(x=0, y= 0)
+
+        self._target_fps: int = 10
+        self._dirty: bool = True
+
+    def mark_dirty(self):
+        """Mark the app as needing a redraw on the next frame."""
+        self._dirty = True
+
+    # Mount widget so they have "_app" parameter
     def _mount_widget(self, widget: widgets.Widget):
         widget._app = self
         for child in widget.children:
@@ -33,6 +44,7 @@ class App:
         self._mount_widget(child)
         parent.children.append(child)
 
+    # Handle inter widget messages
     def post_message(self, message) -> None:
         msg_type = type(message)
         handler = self._handlers.get(msg_type)
@@ -40,8 +52,8 @@ class App:
             handler(message)
         else:
             logging.log(f"Failed to find handler in post_message for: {message}")
-        self.root.render()  # TODO: Fix render loop
-
+        self.mark_dirty()
+    
     def _register_handlers(self):
         for name in dir(self):
             method = getattr(self, name)
@@ -65,6 +77,7 @@ class App:
                 return found
         return None
 
+    # Terminal util functions
     def _start_terminal(self):
         self._old_settings = termios.tcgetattr(self._fd)
 
@@ -87,22 +100,101 @@ class App:
         sys.stdout.write("\x1b[>0u")
         sys.stdout.write("\x1b[?25h")
         sys.stdout.write("\x1b[?1049l")
+
+        sys.stdout.write("\033[?1006l")  # Disable SGR extended mouse mode
+        sys.stdout.write("\033[?1003l")  # Disable all mouse movement tracking
+        sys.stdout.write("\033[?1000l")
+
         sys.stdout.flush()
 
         # fcntl.fcntl(self._fd, fcntl.F_SETFL, self._old_flags)
         termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
+    # Read keys
     def _add_key_to_queue(self):
         key = ascii.read_key()
-        self._key_queue.put_nowait(key)
+        if isinstance(key, ascii.Key):
+            self._key_queue.put_nowait(key)
+        elif isinstance(key, ascii.Mouse):
+            self._mouse_queue.put_nowait(key)
 
     async def read_key(self) -> ascii.Key:
         return await self._key_queue.get()
+    
+    async def read_mouse(self) -> ascii.Mouse:
+        return await self._mouse_queue.get()
 
-    def write(self, data: str):
-        """Write to terminal. Stdout writes are fast, no need for async."""
-        sys.stdout.write(data)
-        sys.stdout.flush()
+    # Rendering loop
+    async def _render_loop(self):
+        while self._running:
+            start_time = asyncio.get_event_loop().time()
+
+            self.root.on_frame()
+
+            if not self._dirty:
+                sleep_time = (1 / self._target_fps)
+                await asyncio.sleep(sleep_time)
+            else:
+                commands.clear_screen()
+
+                # Define the size each component wants to be
+                self.root.measure(
+                    available_width=self.width,
+                    available_height=self.height
+                )
+                
+                # Compute the layout
+                screen_rect = layout.Rect(
+                    x=0,
+                    y=0,
+                    width=self.width,
+                    height=self.height
+                )
+                self.root.layout(screen_rect)
+
+                # Render the components
+                self.root.render()
+                self._dirty=False
+                
+                logging.log("Rendering")
+
+                elapsed = asyncio.get_event_loop().time() - start_time
+                sleep_time = (1 / self._target_fps) - elapsed
+                if sleep_time < 0:
+                    logging.log(f"Render loop took more than {1/self._target_fps}: {elapsed}s")
+                else:
+                    await asyncio.sleep(sleep_time)
+
+    async def _input_key_loop(self):
+        """Handles keyboard input from dedicated key queue."""
+        while self._running:
+            key = await self.read_key()
+            if isinstance(key, ascii.Key):
+                logging.log(f"received key", key)
+                if key.modifiers == {"ctrl"} and key.key == 'c':
+                    self.mark_dirty()
+                    self._running = False
+                    break
+                
+                self.root.handle_key(key)
+                self.mark_dirty()
+
+    async def _input_mouse_loop(self):
+        """Handles mouse input from dedicated mouse queue.
+        
+        Following Textual's approach: dispatch each mouse event individually
+        and let widgets handle scroll accumulation if needed.
+        """
+        while self._running:
+            try:
+                mouse = await asyncio.wait_for(self._mouse_queue.get(), timeout=0.1)
+            except asyncio.TimeoutError:
+                continue  # Check _running again
+            
+            
+            # Dispatch each mouse event individually to the widget tree
+            self.root.handle_mouse(mouse)
+
 
     async def run(self):
         self._running = True
@@ -119,37 +211,11 @@ class App:
         loop.add_reader(self._fd, self._add_key_to_queue)
 
         try:
-            i = 0
-            while self._running:
-                commands.clear_screen()
-                
-                # Compute the size of the components
-                dimensions = self.root.measure(
-                    available_width=self.width,
-                    available_height=self.height
-                )
-                
-                # Compute the layout
-                screen_rect = layout.Rect(
-                    x=0,
-                    y=0,
-                    width=self.width,
-                    height=self.height
-                )
-                self.root.layout(screen_rect)
-
-                # Render the components
-                self.root.render()
-
-                key = await self.read_key()
-
-                if key.key == "q":
-                    break
-                
-                self.root.handle_key(key)
-
-                commands.clear_screen()
-                self.root.render()
+            await asyncio.gather(
+                self._render_loop(),
+                self._input_key_loop(),
+                self._input_mouse_loop()
+            )
         finally:
             self._stop_terminal()
             if self._dev:

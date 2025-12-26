@@ -20,7 +20,6 @@ class Input(text.Text):
         if super().handle_key(key):
             return True
 
-        logging.log("Key: ", key)
         if key.modifiers == {"shift"} and key.key == "enter":
             self.content += "\n"
             return True

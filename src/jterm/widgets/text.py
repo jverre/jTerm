@@ -71,35 +71,35 @@ class Text(widget.Widget):
         else:
             raise ValueError(f"SizeMode {self.width.mode} not supported")
 
-        logging.log(f"Measure - Text ({self.id}) - width:{width}, height:{height}")
         return Dimensions(width=width, height=height)
 
     def layout(self, rect: Rect):
-        logging.log(f"Layout - Text ({self.id}): ", self.content_rect)
         self.rect = rect
 
     def render_content(self):
-        logging.log(f"Render - Text ({self.id}): ", self.content_rect)
         r = self.content_rect
         lines = self.content.split('\n')
 
         if r.height <= 0:
             return
         
-        current_row = 0
-
+        # Expand all lines with wrapping first to get the full list of display lines
+        display_lines = []
         for line in lines:
+            formatted_line = textwrap.fill(line, width=r.width)
+            display_lines.extend(formatted_line.split("\n"))
+        
+        # Apply scroll_offset and _clip_top: skip lines that are scrolled or clipped by parent
+        start_line = self.scroll_offset + self._clip_top
+        visible_lines = display_lines[start_line:start_line + r.height]
+        
+        # Render only the visible lines
+        for current_row, line_content in enumerate(visible_lines):
             if current_row >= r.height:
                 break
             
-            formatted_line = textwrap.fill(line, width=r.width)
-            for line_content in formatted_line.split("\n"):
-                if current_row >= r.height:
-                    break
-            
-                sys.stdout.write(
-                    f"\033[{r.y + 1 + current_row};{r.x + 1}H{line_content}"
-                )
-                current_row += 1
-
+            sys.stdout.write(
+                f"\033[{r.y + 1 + current_row};{r.x + 1}H{line_content}"
+            )
+        
         sys.stdout.flush()
